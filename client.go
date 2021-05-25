@@ -16,8 +16,8 @@ import (
 
 	"golang.org/x/net/http2"
 
-	"github.com/mmatczuk/go-http-tunnel/log"
-	"github.com/mmatczuk/go-http-tunnel/proto"
+	"github.com/hons82/go-http-tunnel/log"
+	"github.com/hons82/go-http-tunnel/proto"
 )
 
 // ClientConfig is configuration of the Client.
@@ -204,13 +204,12 @@ func (c *Client) dial() (net.Conn, error) {
 	if b == nil {
 		return doDial()
 	}
-
+	b.Reset()
 	for {
 		conn, err := doDial()
 
 		// success
 		if err == nil {
-			b.Reset()
 			return conn, err
 		}
 

@@ -18,10 +18,10 @@ import (
 
 	"golang.org/x/net/http2"
 
+	"github.com/hons82/go-http-tunnel/id"
+	"github.com/hons82/go-http-tunnel/log"
+	"github.com/hons82/go-http-tunnel/proto"
 	"github.com/inconshreveable/go-vhost"
-	"github.com/mmatczuk/go-http-tunnel/id"
-	"github.com/mmatczuk/go-http-tunnel/log"
-	"github.com/mmatczuk/go-http-tunnel/proto"
 )
 
 // ServerConfig defines configuration for the Server.
@@ -222,7 +222,7 @@ func (s *Server) Start() {
 }
 
 func (s *Server) handleClient(conn net.Conn) {
-	logger := log.NewContext(s.logger).With("addr", conn.RemoteAddr())
+	logger := log.NewContext(s.logger).With("remote addr", conn.RemoteAddr())
 
 	logger.Log(
 		"level", 1,
@@ -564,22 +564,26 @@ func (s *Server) listen(l net.Listener, identifier id.ID) {
 // ServeHTTP proxies http connection to the client.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	resp, err := s.RoundTrip(r)
-	if err == errUnauthorised {
-		w.Header().Set("WWW-Authenticate", "Basic realm=\"User Visible Realm\"")
-		http.Error(w, err.Error(), http.StatusUnauthorized)
-		return
-	}
 	if err != nil {
+		code := http.StatusBadGateway
+		if err == errUnauthorised {
+			w.Header().Set("WWW-Authenticate", "Basic realm=\"User Visible Realm\"")
+			code = http.StatusUnauthorized
+		} else if err == errClientNotSubscribed {
+			code = http.StatusNotFound
+		}
 		s.logger.Log(
 			"level", 0,
 			"action", "round trip failed",
 			"addr", r.RemoteAddr,
 			"host", r.Host,
 			"url", r.URL,
-			"err", err,
+			"code", code,
 		)
-
-		http.Error(w, err.Error(), http.StatusBadGateway)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.WriteHeader(code)
+		fmt.Fprintln(w, err.Error())
 		return
 	}
 	defer resp.Body.Close()
@@ -791,4 +795,41 @@ func (s *Server) Stop() {
 	if s.listener != nil {
 		s.listener.Close()
 	}
+}
+
+type ListenerInfo struct {
+	Network string
+	Addr    string
+}
+
+type ClientInfo struct {
+	Id        string
+	Listeners []*ListenerInfo
+	Hosts     []string
+}
+
+func (s *Server) GetClientInfo() []*ClientInfo {
+	s.registry.mu.Lock()
+	defer s.registry.mu.Unlock()
+	ret := []*ClientInfo{}
+	for k, v := range s.registry.items {
+		c := &ClientInfo{Id: k.String()}
+		ret = append(ret, c)
+		if v == voidRegistryItem {
+			s.logger.Log(
+				"level", 3,
+				"identifier", k.String(),
+				"msg", "void registry item",
+			)
+		} else {
+			for _, l := range v.Hosts {
+				c.Hosts = append(c.Hosts, l.Host)
+			}
+			for _, l := range v.Listeners {
+				p := &ListenerInfo{Network: l.Addr().Network(), Addr: l.Addr().String()}
+				c.Listeners = append(c.Listeners, p)
+			}
+		}
+	}
+	return ret
 }

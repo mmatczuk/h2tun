@@ -23,9 +23,10 @@ Example:
 
 Author:
 	Written by M. Matczuk (mmatczuk@gmail.com)
+	Forked  by H. Tribus  (hons82@gmail.com)
 
 Bugs:
-	Submit bugs to https://github.com/mmatczuk/go-http-tunnel/issues
+	Submit bugs to https://github.com/hons82/go-http-tunnel/issues
 `
 
 func init() {
@@ -41,6 +42,7 @@ type options struct {
 	httpAddr   string
 	httpsAddr  string
 	tunnelAddr string
+	apiAddr    string
 	sniAddr    string
 	tlsCrt     string
 	tlsKey     string
@@ -54,6 +56,7 @@ func parseArgs() *options {
 	httpAddr := flag.String("httpAddr", ":80", "Public address for HTTP connections, empty string to disable")
 	httpsAddr := flag.String("httpsAddr", ":443", "Public address listening for HTTPS connections, emptry string to disable")
 	tunnelAddr := flag.String("tunnelAddr", ":5223", "Public address listening for tunnel client")
+	apiAddr := flag.String("apiAddr", ":5091", "Public address for HTTP API to get tunnels info")
 	sniAddr := flag.String("sniAddr", "", "Public address listening for TLS SNI connections, empty string to disable")
 	tlsCrt := flag.String("tlsCrt", "server.crt", "Path to a TLS certificate file")
 	tlsKey := flag.String("tlsKey", "server.key", "Path to a TLS key file")
@@ -67,6 +70,7 @@ func parseArgs() *options {
 		httpAddr:   *httpAddr,
 		httpsAddr:  *httpsAddr,
 		tunnelAddr: *tunnelAddr,
+		apiAddr:    *apiAddr,
 		sniAddr:    *sniAddr,
 		tlsCrt:     *tlsCrt,
 		tlsKey:     *tlsKey,

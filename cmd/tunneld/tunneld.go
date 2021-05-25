@@ -9,15 +9,16 @@ import (
 	"crypto/x509"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"os"
 	"strings"
 
 	"golang.org/x/net/http2"
 
-	"github.com/mmatczuk/go-http-tunnel"
-	"github.com/mmatczuk/go-http-tunnel/id"
-	"github.com/mmatczuk/go-http-tunnel/log"
+	"github.com/hons82/go-http-tunnel"
+	"github.com/hons82/go-http-tunnel/id"
+	"github.com/hons82/go-http-tunnel/log"
 )
 
 func main() {
@@ -65,16 +66,59 @@ func main() {
 		}
 	}
 
-	// start HTTP
-	if opts.httpAddr != "" {
+	// start API
+	if opts.apiAddr != "" {
 		go func() {
 			logger.Log(
 				"level", 1,
-				"action", "start http",
-				"addr", opts.httpAddr,
+				"action", "start api",
+				"addr", opts.apiAddr,
 			)
+			go initAPIServer(&ApiConfig{
+				Addr:   opts.apiAddr,
+				Server: server,
+				Logger: logger,
+			})
+		}()
+	}
 
-			fatal("failed to start HTTP: %s", http.ListenAndServe(opts.httpAddr, server))
+	// start HTTP
+	if opts.httpAddr != "" {
+		go func() {
+			if opts.httpsAddr != "" {
+				logger.Log(
+					"level", 1,
+					"action", "start http redirect",
+					"addr", opts.httpAddr,
+				)
+
+				_, tlsPort, err := net.SplitHostPort(opts.httpsAddr)
+				if err != nil {
+					fatal("failed to get https port: %s", err)
+				}
+				fatal("failed to start HTTP: %s",
+					http.ListenAndServe(opts.httpAddr, http.HandlerFunc(
+						func(w http.ResponseWriter, r *http.Request) {
+							host, _, err := net.SplitHostPort(r.Host)
+							if err != nil {
+								host = r.Host
+							}
+							u := r.URL
+							u.Host = net.JoinHostPort(host, tlsPort)
+							u.Scheme = "https"
+							http.Redirect(w, r, u.String(), http.StatusMovedPermanently)
+						},
+					)),
+				)
+			} else {
+				logger.Log(
+					"level", 1,
+					"action", "start http",
+					"addr", opts.httpAddr,
+				)
+
+				fatal("failed to start HTTP: %s", http.ListenAndServe(opts.httpAddr, server))
+			}
 		}()
 	}
 
